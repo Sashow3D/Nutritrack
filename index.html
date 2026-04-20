@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#E94560">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="NutriTrack">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<title>Nutrition Tracker</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body, #root { height: 100%; }
+  body { background: #0a0a0f; color: #e0e0e0; font-family: 'JetBrains Mono', monospace; overflow-x: hidden; }
+  input, select, button { font-family: inherit; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(233,69,96,0.3); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script>
+const { useState, useEffect, useCallback, createElement: h } = React;
+
+const STORAGE_KEY = "nutritrack-v6";
+
+const MEAL_SLOTS = {
+  training: [
+    { time: "08:00", label: "Doručak", options: [
+      { id: "d1", desc: "3 jaja scrambled + šaka spanaća, 50g ovsenih sa bobicama", p: 35, c: 32, f: 16, kcal: 410 },
+      { id: "d2", desc: "Omlet: 3 jaja + paprika + šampinjoni, 40g ovsenih, bobice", p: 32, c: 28, f: 16, kcal: 385 },
+      { id: "d3", desc: "40g whey isolate, 50g ovsene, 10g kikiriki puter, so, kreatin", p: 41, c: 34, f: 10, kcal: 400 },
+      { id: "d4", desc: "200g grčki jogurt, 40g ovsenih, bobice, 10g meda, chia", p: 28, c: 42, f: 8, kcal: 355 },
+      { id: "d5", desc: "3 jaja + šaka kelja na pari, 50g ovsenih, banana", p: 33, c: 38, f: 16, kcal: 425 },
+    ]},
+    { time: "12:30", label: "Ručak", options: [
+      { id: "r1", desc: "150g pileće grudi, 150g pečene paprike + šargarepe, 80g pirinča", p: 42, c: 30, f: 5, kcal: 335 },
+      { id: "r2", desc: "150g govedine, 150g šargarepe i brokoli, 80g slatkog krompira", p: 40, c: 30, f: 10, kcal: 370 },
+      { id: "r3", desc: "150g piletine, 100g sočiva, paradajz sos, 100g spanaća", p: 45, c: 28, f: 6, kcal: 350 },
+      { id: "r4", desc: "150g ćuretine mlevene, 200g povrće u tavi, 60g kinoe", p: 42, c: 25, f: 8, kcal: 340 },
+      { id: "r5", desc: "150g piletine, 200g paprika + brokoli + šargarepa, 80g pirinča", p: 42, c: 35, f: 5, kcal: 355 },
+    ]},
+    { time: "15:30", label: "Pre-Workout", options: [
+      { id: "pw1", desc: "1 banana, 15g kikiriki putera", p: 5, c: 28, f: 8, kcal: 200 },
+      { id: "pw2", desc: "30g ovsenih u vodi, 1 banana, cimet", p: 5, c: 38, f: 3, kcal: 195 },
+      { id: "pw3", desc: "1 jabuka, 15g badema", p: 3, c: 22, f: 8, kcal: 170 },
+      { id: "pw4", desc: "1 banana, 10g tamne čokolade (85%+)", p: 3, c: 28, f: 5, kcal: 170 },
+    ]},
+    { time: "18:00", label: "Post-Workout", options: [
+      { id: "po1", desc: "1 scoop whey, 1 banana", p: 27, c: 28, f: 2, kcal: 235 },
+      { id: "po2", desc: "1 scoop whey, 100g bobica, chia", p: 28, c: 18, f: 5, kcal: 230 },
+      { id: "po3", desc: "1 scoop whey, 30g instant ovsenih u vodi", p: 30, c: 22, f: 3, kcal: 235 },
+    ]},
+    { time: "20:00", label: "Večera", options: [
+      { id: "v1", desc: "150g ćuretine, 200g brokoli + rotkvice, zelena salata", p: 38, c: 10, f: 8, kcal: 260 },
+      { id: "v2", desc: "130g tune konzerva, pečena paprika + tikvica, maslinovo ulje", p: 33, c: 12, f: 13, kcal: 295 },
+      { id: "v3", desc: "150g piletine, 200g pečene tikvice i paprike, spanać", p: 40, c: 12, f: 6, kcal: 260 },
+      { id: "v4", desc: "130g tune, salata: rotkvice, paradajz, krastavac, limun", p: 32, c: 8, f: 3, kcal: 185 },
+      { id: "v5", desc: "150g govedine mlevene (5%), 200g brokoli + šargarepe", p: 42, c: 15, f: 12, kcal: 335 },
+    ]},
+    { time: "21:30", label: "Snack", options: [
+      { id: "s1", desc: "200g grčki jogurt 0%, mleveno laneno seme", p: 21, c: 8, f: 4, kcal: 150 },
+      { id: "s2", desc: "200g grčki jogurt, 10g meda, 10g oraha", p: 21, c: 18, f: 6, kcal: 210 },
+      { id: "s3", desc: "150g cottage cheese, bobice", p: 20, c: 12, f: 4, kcal: 160 },
+      { id: "s4", desc: "150g cottage cheese, 10g oraha", p: 22, c: 5, f: 8, kcal: 180 },
+    ]},
+  ],
+  rest: [
+    { time: "08:00", label: "Doručak", options: [
+      { id: "nd1", desc: "3 jaja, 1 kriška ražanog, avokado 40g, paradajz", p: 24, c: 18, f: 18, kcal: 330 },
+      { id: "nd2", desc: "Omlet: 3 jaja, šampinjoni, paprika, paradajz + spanać", p: 26, c: 8, f: 16, kcal: 275 },
+      { id: "nd3", desc: "2 jaja + 2 belanca, 150g pečene šargarepe i paprike, ražani", p: 28, c: 22, f: 12, kcal: 310 },
+      { id: "nd4", desc: "3 jaja, avokado 50g, paradajz, ražani hleb, rukola", p: 25, c: 20, f: 22, kcal: 375 },
+      { id: "nd5", desc: "40g whey isolate, 50g ovsene, 10g kikiriki puter, so, kreatin", p: 41, c: 34, f: 10, kcal: 400 },
+    ]},
+    { time: "12:30", label: "Ručak", options: [
+      { id: "nr1", desc: "1 konzerva tune, velika salata: zelena, šargarepa, rotkvice, maslinovo ulje", p: 35, c: 10, f: 12, kcal: 285 },
+      { id: "nr2", desc: "150g ćuretine, 200g povrće u tavi, 60g kinoe", p: 42, c: 25, f: 8, kcal: 340 },
+      { id: "nr3", desc: "150g govedine mlevene (5%), 200g brokoli + šargarepe, salata", p: 42, c: 15, f: 12, kcal: 335 },
+      { id: "nr4", desc: "150g piletine, salata: spanać, paradajz, šargarepa, bundeva seme, maslinovo ulje", p: 42, c: 10, f: 14, kcal: 330 },
+      { id: "nr5", desc: "150g ćuretine, 150g pečene paprike + šargarepe, 80g sočiva", p: 42, c: 28, f: 5, kcal: 330 },
+    ]},
+    { time: "15:30", label: "Snack", options: [
+      { id: "ns1", desc: "150g cottage cheese, 15g bundeva semena", p: 24, c: 5, f: 10, kcal: 205 },
+      { id: "ns2", desc: "200g grčki jogurt, chia, cimet", p: 22, c: 8, f: 6, kcal: 175 },
+      { id: "ns3", desc: "200g grčki jogurt, 15g bundeva semena, cimet", p: 24, c: 10, f: 10, kcal: 225 },
+      { id: "ns4", desc: "1 konzerva tune (130g), rotkvice, krastavac, limun", p: 32, c: 5, f: 2, kcal: 165 },
+    ]},
+    { time: "18:30", label: "Večera", options: [
+      { id: "nv1", desc: "150g piletine, 200g pečene tikvice i paprike, spanać", p: 40, c: 12, f: 6, kcal: 260 },
+      { id: "nv2", desc: "150g ćuretine, 200g pečene paprike i tikvice, rotkvice", p: 38, c: 12, f: 5, kcal: 245 },
+      { id: "nv3", desc: "150g piletine, salata: spanać, rotkvice, šargarepa, avokado 40g", p: 40, c: 10, f: 14, kcal: 325 },
+      { id: "nv4", desc: "150g govedine mlevene (5%), 200g brokoli + šargarepe, salata", p: 42, c: 15, f: 12, kcal: 335 },
+    ]},
+    { time: "21:00", label: "Snack 2", options: [
+      { id: "ns2a", desc: "1 scoop kazein, 10 badema", p: 30, c: 5, f: 8, kcal: 210 },
+      { id: "ns2b", desc: "1 scoop kazein, 200ml bademovog mleka", p: 28, c: 4, f: 4, kcal: 160 },
+      { id: "ns2c", desc: "1 scoop kazein, 1 kašika kikiriki putera", p: 30, c: 4, f: 10, kcal: 225 },
+      { id: "ns2d", desc: "1 scoop kazein, mleveno laneno seme", p: 28, c: 3, f: 5, kcal: 170 },
+    ]},
+  ],
+};
+
+const TIMING = {
+  training: { title: "⏱ Trening Dan (17:00)", notes: [
+    { time: "08:00", label: "Doručak", detail: "Protein + složeni karbohidrati" },
+    { time: "12:30", label: "Ručak", detail: "Najveći obrok — P + C + povrće" },
+    { time: "15:30", label: "Pre-Workout", detail: "1.5h pre — brzi karbohidrati" },
+    { time: "17:00", label: "TRENING", detail: "60 min strength" },
+    { time: "18:00", label: "Post-Workout", detail: "Whey + C unutar 30–60 min" },
+    { time: "20:00", label: "Večera", detail: "Protein + povrće, nizak C" },
+    { time: "21:30", label: "Snack", detail: "Spori protein pre spavanja" },
+  ]},
+  rest: { title: "⏱ Odmor Dan", notes: [
+    { time: "08:00", label: "Doručak", detail: "Jaja + masti, bez brzih C" },
+    { time: "12:30", label: "Ručak", detail: "Protein + povrće, umeren C" },
+    { time: "15:30", label: "Snack", detail: "Protein za MPS" },
+    { time: "18:30", label: "Večera", detail: "Protein + povrće + zdrave masti" },
+    { time: "21:00", label: "Snack 2", detail: "Kazein pre spavanja" },
+  ]},
+};
+
+const TODAY = new Date().toISOString().split("T")[0];
+
+function loadData() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }
+  catch { return {}; }
+}
+
+function saveDataLS(data) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) { console.error(e); }
+}
+
+function App() {
+  const [tab, setTab] = useState("tracker");
+  const [date, setDate] = useState(TODAY);
+  const [allData, setAllData] = useState(loadData);
+  const [expanded, setExpanded] = useState(null);
+
+  const day = allData[date] || { weight: "", dayType: "training", selections: {} };
+  const dtype = day.dayType || "training";
+  const slots = MEAL_SLOTS[dtype];
+
+  const save = useCallback((nd) => { setAllData(nd); saveDataLS(nd); }, []);
+  const updateDay = (u) => save({ ...allData, [date]: { ...day, ...u } });
+  const selectMeal = (si, oid) => { updateDay({ selections: { ...day.selections, [si]: oid } }); setExpanded(null); };
+  const clearMeal = (si) => { const s = { ...day.selections }; delete s[si]; updateDay({ selections: s }); };
+
+  const selMeals = slots.map((s, i) => day.selections?.[i] ? s.options.find(o => o.id === day.selections[i]) : null).filter(Boolean);
+  const tot = selMeals.reduce((a, m) => ({ p: a.p+m.p, c: a.c+m.c, f: a.f+m.f, kcal: a.kcal+m.kcal }), { p:0, c:0, f:0, kcal:0 });
+  const TGT = { kcal: 1750, p: 180, c: dtype === "training" ? 130 : 70, f: dtype === "training" ? 65 : 55 };
+
+  const wh = Object.entries(allData).filter(([_,v]) => v.weight && parseFloat(v.weight) > 0)
+    .sort(([a],[b]) => a.localeCompare(b)).map(([d,v]) => ({ date: d, weight: parseFloat(v.weight) }));
+
+  const getWkAvg = () => {
+    const d = new Date(date); const dow = d.getDay(); const mon = new Date(d);
+    mon.setDate(d.getDate() - ((dow+6)%7)); const w = [];
+    for(let i=0;i<7;i++){const dd=new Date(mon);dd.setDate(mon.getDate()+i);const k=dd.toISOString().split("T")[0];
+    if(allData[k]?.weight&&parseFloat(allData[k].weight)>0)w.push(parseFloat(allData[k].weight));}
+    return w.length?(w.reduce((a,b)=>a+b,0)/w.length).toFixed(1):null;
+  };
+  const wkAvg = getWkAvg();
+
+  const cs = {
+    hdr: { padding: "20px 16px 14px", borderBottom: "1px solid rgba(233,69,96,0.2)", background: "linear-gradient(180deg,rgba(233,69,96,0.08),transparent)" },
+    ttl: { fontSize: "17px", fontWeight: 800, letterSpacing: "3px", color: "#E94560", textTransform: "uppercase" },
+    sub: { fontSize: "10px", color: "rgba(255,255,255,0.4)", letterSpacing: "1.5px", marginTop: "3px" },
+    tabs: { display: "flex", borderBottom: "1px solid rgba(255,255,255,0.08)" },
+    tab: (a) => ({ flex:1, padding:"11px 0", textAlign:"center", fontSize:"10px", fontWeight:700, letterSpacing:"1.5px",
+      textTransform:"uppercase", cursor:"pointer", fontFamily:"inherit", background: a?"rgba(233,69,96,0.12)":"transparent",
+      color: a?"#E94560":"rgba(255,255,255,0.4)", border:"none", borderBottom: a?"2px solid #E94560":"2px solid transparent" }),
+    sec: { padding: "14px 16px" },
+    inp: (w) => ({ width:w||"auto", padding:"9px 10px", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)",
+      borderRadius:"8px", color:"#e0e0e0", fontSize:"13px", fontFamily:"inherit", outline:"none" }),
+    tog: (a) => ({ flex:1, padding:"9px", textAlign:"center", fontSize:"11px", fontWeight:700, letterSpacing:"1px",
+      cursor:"pointer", fontFamily:"inherit", textTransform:"uppercase",
+      background: a?"rgba(233,69,96,0.15)":"rgba(255,255,255,0.03)",
+      color: a?"#E94560":"rgba(255,255,255,0.35)",
+      border: a?"1px solid rgba(233,69,96,0.3)":"1px solid rgba(255,255,255,0.06)", borderRadius:"8px" }),
+  };
+
+  const mealCard = (opt, slotIdx, isSelected) => {
+    if(isSelected) return h("div", { key: opt.id, style: { padding:"11px", background:"rgba(233,69,96,0.1)",
+      border:"1px solid rgba(233,69,96,0.25)", borderRadius:"10px", display:"flex", gap:"10px", alignItems:"flex-start" }},
+      h("div", { style: { width:20, height:20, minWidth:20, borderRadius:5, background:"#E94560",
+        display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontSize:12, fontWeight:"bold", marginTop:1 }}, "✓"),
+      h("div", { style: { flex:1 }},
+        h("div", { style: { fontSize:11, color:"rgba(255,255,255,0.65)", lineHeight:"1.5" }}, opt.desc),
+        h("div", { style: { fontSize:10, color:"rgba(255,255,255,0.35)", marginTop:3 }},
+          "P "+opt.p+"g · C "+opt.c+"g · F "+opt.f+"g · "+opt.kcal+" kcal")),
+      h("div", { style: { display:"flex", flexDirection:"column", gap:5 }},
+        h("button", { onClick:(e)=>{e.stopPropagation();setExpanded(slotIdx);},
+          style: { background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:5,
+            color:"rgba(255,255,255,0.4)", cursor:"pointer", fontSize:9, fontFamily:"inherit", padding:"3px 7px" }}, "zameni"),
+        h("button", { onClick:(e)=>{e.stopPropagation();clearMeal(slotIdx);},
+          style: { background:"rgba(255,80,80,0.08)", border:"1px solid rgba(255,80,80,0.15)", borderRadius:5,
+            color:"rgba(255,100,100,0.5)", cursor:"pointer", fontSize:9, fontFamily:"inherit", padding:"3px 7px" }}, "obriši"))
+    );
+    return h("div", { key: opt.id, onClick: () => selectMeal(slotIdx, opt.id),
+      style: { padding:"9px 11px", background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)",
+        borderRadius:8, cursor:"pointer", marginBottom:3, transition:"all 0.15s" }},
+      h("div", { style: { fontSize:11, color:"rgba(255,255,255,0.6)", lineHeight:"1.4" }}, opt.desc),
+      h("div", { style: { fontSize:10, color:"rgba(255,255,255,0.3)", marginTop:2 }},
+        "P "+opt.p+"g · C "+opt.c+"g · F "+opt.f+"g · "+opt.kcal+" kcal"));
+  };
+
+  const macroBar = () => h("div", { style: { display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:6,
+    padding:14, background:"rgba(233,69,96,0.08)", borderRadius:12, marginTop:14, border:"1px solid rgba(233,69,96,0.15)" }},
+    [{ v:tot.kcal, t:TGT.kcal, l:"KCAL", u:"" }, { v:tot.p, t:TGT.p, l:"PROTEIN", u:"g" },
+     { v:tot.c, t:TGT.c, l:"CARBS", u:"g" }, { v:tot.f, t:TGT.f, l:"FATS", u:"g" }].map(m => {
+      const pct = m.t>0?(m.v/m.t)*100:0;
+      return h("div", { key:m.l, style:{ textAlign:"center" }},
+        h("div", { style:{ fontSize:17, fontWeight:800, color: pct>110?"#ff6b6b":"#E94560" }}, m.v),
+        h("div", { style:{ fontSize:8, color:"rgba(255,255,255,0.4)", letterSpacing:"1px", marginTop:2 }}, m.l),
+        h("div", { style:{ height:3, borderRadius:2, background:"rgba(255,255,255,0.1)", marginTop:5, overflow:"hidden" }},
+          h("div", { style:{ height:"100%", width:Math.min(pct,100)+"%", background: pct>110?"#ff6b6b":"#E94560",
+            borderRadius:2, transition:"width 0.3s" }})),
+        h("div", { style:{ fontSize:8, color:"rgba(255,255,255,0.25)", marginTop:2 }}, "/ "+m.t+m.u));
+    }));
+
+  // TRACKER
+  const trackerTab = () => h("div", { style: cs.sec },
+    h("div", { style: { display:"flex", gap:8, marginBottom:12 }},
+      h("input", { type:"date", value:date, onChange:e=>setDate(e.target.value), style:{ ...cs.inp(), flex:1 }}),
+      h("input", { type:"number", placeholder:"kg", step:"0.1", value:day.weight,
+        onChange:e=>updateDay({weight:e.target.value}), style:{ ...cs.inp("80px"), textAlign:"right" }})),
+    h("div", { style: { display:"flex", gap:8, marginBottom:18 }},
+      ["training","rest"].map(t => h("button", { key:t, onClick:()=>{updateDay({dayType:t,selections:{}});setExpanded(null);},
+        style: cs.tog(dtype===t) }, t==="training"?"🏋️ Trening":"🛋️ Odmor"))),
+    ...slots.map((slot, si) => {
+      const selId = day.selections?.[si];
+      const selOpt = selId ? slot.options.find(o=>o.id===selId) : null;
+      const isExp = expanded === si;
+      return h("div", { key:si, style:{ marginBottom:11 }},
+        h("div", { style:{ display:"flex", alignItems:"center", gap:7, marginBottom:5 }},
+          h("span", { style:{ fontSize:10, fontWeight:700, color:"#E94560", letterSpacing:"1px" }}, slot.time),
+          h("span", { style:{ fontSize:12, fontWeight:700, color:"rgba(255,255,255,0.7)" }}, slot.label),
+          h("span", { style:{ fontSize:9, color:"rgba(255,255,255,0.2)" }}, "("+slot.options.length+")")),
+        selOpt && !isExp ? mealCard(selOpt, si, true) :
+          h("div", null, ...slot.options.map(o => mealCard(o, si, false)),
+            isExp ? h("button", { onClick:()=>setExpanded(null), style:{ padding:5, width:"100%", background:"none",
+              border:"1px solid rgba(255,255,255,0.08)", borderRadius:6, color:"rgba(255,255,255,0.3)", fontSize:10,
+              cursor:"pointer", fontFamily:"inherit", marginTop:2 }}, "otkaži") : null));
+    }),
+    macroBar(),
+    h("div", { style:{ fontSize:9, color:"rgba(255,255,255,0.2)", textAlign:"center", marginTop:6 }},
+      "+ ~100–150 kcal od ulja i varijacija"));
+
+  // TIMING
+  const timingTab = () => h("div", { style: cs.sec },
+    ...["training","rest"].map(k => h("div", { key:k, style:{ marginBottom:24 }},
+      h("div", { style:{ fontSize:13, fontWeight:800, color:"#E94560", marginBottom:10 }}, TIMING[k].title),
+      ...TIMING[k].notes.map((n,i) => h("div", { key:i, style:{ display:"flex", gap:10, padding:"9px 0",
+        borderBottom:"1px solid rgba(255,255,255,0.05)" }},
+        h("div", { style:{ fontSize:11, fontWeight:700, color:"#E94560", minWidth:70 }}, n.time),
+        h("div", null,
+          h("div", { style:{ fontSize:12, fontWeight:700, color:"#fff" }}, n.label),
+          h("div", { style:{ fontSize:11, color:"rgba(255,255,255,0.45)", marginTop:1 }}, n.detail)))))),
+    h("div", { style:{ padding:12, background:"rgba(15,52,96,0.2)", borderRadius:10, border:"1px solid rgba(15,52,96,0.3)" }},
+      h("div", { style:{ fontSize:11, fontWeight:700, color:"#4A9FD9", marginBottom:5 }}, "💡 PRAVILA"),
+      h("div", { style:{ fontSize:11, color:"rgba(255,255,255,0.5)", lineHeight:"1.7" }},
+        "• Pre-workout: ", h("b",{style:{color:"#fff"}},"1.5h pre"), " — brzi C", h("br"),
+        "• Post-workout: ", h("b",{style:{color:"#fff"}},"unutar 30–60 min"), h("br"),
+        "• Protein: ", h("b",{style:{color:"#fff"}},"4–5 × 30–40g"), " za MPS", h("br"),
+        "• Pre spavanja: ", h("b",{style:{color:"#fff"}},"kazein"), h("br"),
+        "• Fasting u minicutu: ", h("b",{style:{color:"#E94560"}},"NE"), h("br"),
+        "• Whey shake: ", h("b",{style:{color:"#fff"}},"dodaj so"), " protiv crasha")));
+
+  // PROGRESS
+  const progressTab = () => h("div", { style: cs.sec },
+    wkAvg ? h("div", { style:{ padding:14, background:"linear-gradient(135deg,rgba(15,52,96,0.3),rgba(233,69,96,0.1))",
+      borderRadius:12, border:"1px solid rgba(15,52,96,0.4)", textAlign:"center", marginBottom:14 }},
+      h("div", { style:{ fontSize:10, color:"rgba(255,255,255,0.4)", letterSpacing:"1.5px", textTransform:"uppercase" }}, "Nedeljni Prosek"),
+      h("div", { style:{ fontSize:30, fontWeight:800, color:"#fff" }}, wkAvg+" kg")) : null,
+    wh.length > 1 ? h("div", { style:{ padding:14, background:"rgba(255,255,255,0.03)", borderRadius:12,
+      border:"1px solid rgba(255,255,255,0.06)", marginBottom:14 }},
+      h("div", { style:{ fontSize:10, color:"rgba(255,255,255,0.4)", letterSpacing:"1.5px", textTransform:"uppercase" }}, "Ukupna Promena"),
+      h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginTop:6 }},
+        h("span", { style:{ fontSize:13, color:"rgba(255,255,255,0.5)" }}, wh[0].weight+" → "+wh[wh.length-1].weight+" kg"),
+        h("span", { style:{ fontSize:18, fontWeight:800,
+          color: wh[wh.length-1].weight<wh[0].weight?"#4CAF50":"#E94560" }},
+          (wh[wh.length-1].weight-wh[0].weight).toFixed(1)+" kg"))) : null,
+    h("div", { style:{ fontSize:10, color:"rgba(255,255,255,0.4)", letterSpacing:"1.5px", textTransform:"uppercase", marginBottom:6 }}, "Dnevni Log"),
+    wh.length===0 ? h("div", { style:{ fontSize:12, color:"rgba(255,255,255,0.3)", padding:"16px 0", textAlign:"center" }},
+      "Unesi kilažu u Tracker tabu") : null,
+    ...wh.slice().reverse().slice(0,21).map((e,i,a) => {
+      const prev = i<a.length-1?a[i+1]:null;
+      const diff = prev?(e.weight-prev.weight).toFixed(1):null;
+      const de = allData[e.date];
+      const sc = de?.selections?Object.keys(de.selections).length:0;
+      const ts = de?.dayType==="rest"?5:6;
+      return h("div", { key:e.date, style:{ display:"flex", justifyContent:"space-between", alignItems:"center",
+        padding:"9px 0", borderBottom:"1px solid rgba(255,255,255,0.05)", fontSize:12 }},
+        h("div", null,
+          h("div", { style:{ color:"#fff", fontWeight:600 }},
+            new Date(e.date+"T12:00:00").toLocaleDateString("sr-Latn",{ day:"numeric", month:"short", weekday:"short" })),
+          h("div", { style:{ fontSize:10, color:"rgba(255,255,255,0.3)", marginTop:1 }},
+            (de?.dayType==="rest"?"Odmor":"Trening")+" • "+sc+"/"+ts)),
+        h("div", { style:{ display:"flex", alignItems:"center", gap:10 }},
+          diff ? h("span", { style:{ fontSize:11, fontWeight:600,
+            color: parseFloat(diff)<0?"#4CAF50":parseFloat(diff)>0?"#E94560":"rgba(255,255,255,0.3)" }},
+            (parseFloat(diff)>0?"+":"")+diff) : null,
+          h("span", { style:{ fontSize:14, fontWeight:700, color:"#fff", minWidth:50, textAlign:"right" }}, e.weight+" kg")));
+    }));
+
+  return h("div", null,
+    h("div", { style: cs.hdr },
+      h("div", { style: cs.ttl }, "Nutrition Tracker"),
+      h("div", { style: cs.sub }, "MINICUT • ~1,750 KCAL")),
+    h("div", { style: cs.tabs },
+      [["tracker","TRACKER"],["timing","TIMING"],["progress","PROGRES"]].map(([k,l]) =>
+        h("button", { key:k, onClick:()=>setTab(k), style: cs.tab(tab===k) }, l))),
+    tab==="tracker" ? trackerTab() : tab==="timing" ? timingTab() : progressTab());
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+
+// Register service worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(e => console.log('SW reg failed:', e));
+}
+</script>
+</body>
+</html>
